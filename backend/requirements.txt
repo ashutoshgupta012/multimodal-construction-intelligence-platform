@@ -1,6 +1,6 @@
 
 streamlit
-ultralytics
+ultralytics-opencv-headless
 Pillow
 pandas
 numpy
