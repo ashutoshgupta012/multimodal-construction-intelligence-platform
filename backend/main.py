@@ -1,279 +1,279 @@
 
-import streamlit as st
+import os
 from io import BytesIO
+
+from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from PIL import Image, UnidentifiedImageError
 from ultralytics import YOLO
 
-# ---------------- PAGE CONFIG ----------------
-st.set_page_config(
-    page_title="ConstructionAI",
-    page_icon="🏗️",
-    layout="wide"
+
+# --------------------------------------------------
+# APPLICATION CONFIGURATION
+# --------------------------------------------------
+
+app = FastAPI(
+    title="ConstructionAI API",
+    description="Multimodal Construction Intelligence Platform",
+    version="1.0.0",
 )
 
-st.title("🏗️ Multimodal Construction Intelligence Platform")
-st.write("Upload a construction image and let AI detect objects in it.")
-
-MAX_FILE_SIZE = 10 * 1024 * 1024
+MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MB
 ALLOWED_FORMATS = {"JPEG", "PNG", "WEBP"}
 
+# Set FRONTEND_URL in Render to your deployed Vercel URL.
+# Example: https://your-project.vercel.app
+frontend_url = os.getenv("FRONTEND_URL", "").strip().rstrip("/")
 
-# ---------------- LOAD AI MODEL ----------------
-@st.cache_resource
-def load_model():
-    return YOLO("yolo11n.pt")
+allowed_origins = [
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+]
 
+if frontend_url:
+    allowed_origins.append(frontend_url)
 
-# ---------------- SIDEBAR ----------------
-st.sidebar.title("ConstructionAI")
-st.sidebar.write("AI-Powered Construction Analysis")
-page = st.sidebar.radio(
-    "Choose Module",
-    ["Dashboard", "Image Analysis", "Safety Monitor",
-     "Crack Analysis", "Cost Estimator", "AI Assistant"]
+# Optional: allow additional origins separated by commas.
+extra_origins = os.getenv("EXTRA_FRONTEND_URLS", "")
+
+for origin in extra_origins.split(","):
+    origin = origin.strip().rstrip("/")
+    if origin and origin not in allowed_origins:
+        allowed_origins.append(origin)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=allowed_origins,
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["*"],
 )
 
 
-# ---------------- DASHBOARD ----------------
-if page == "Dashboard":
-    st.header("Dashboard")
-    st.write("Welcome to your Construction Intelligence Platform.")
+# --------------------------------------------------
+# YOLO MODEL
+# --------------------------------------------------
 
-    col1, col2, col3 = st.columns(3)
-    col1.metric("AI Model", "YOLO11n")
-    col2.metric("Image Limit", "10 MB")
-    col3.metric("Analysis", "Object Detection")
+model = None
+model_error = None
 
-    st.info(
-        "Select Image Analysis from the sidebar to upload an image "
-        "and run AI object detection."
-    )
+try:
+    model_path = os.getenv("YOLO_MODEL_PATH", "yolo11n.pt")
+    model = YOLO(model_path)
+    print(f"YOLO model loaded successfully: {model_path}")
 
-
-# ---------------- IMAGE ANALYSIS ----------------
-elif page == "Image Analysis":
-    st.header("AI Image Analysis")
-    st.write("Upload a JPEG, PNG, or WEBP image to detect objects.")
-
-    uploaded_file = st.file_uploader(
-        "Choose an image",
-        type=["jpg", "jpeg", "png", "webp"]
-    )
-
-    confidence = st.slider(
-        "Detection confidence",
-        min_value=0.10,
-        max_value=0.90,
-        value=0.25,
-        step=0.05
-    )
-
-    if uploaded_file is not None:
-        content = uploaded_file.getvalue()
-
-        if len(content) == 0:
-            st.error("The uploaded file is empty.")
-
-        elif len(content) > MAX_FILE_SIZE:
-            st.error("Image size must not exceed 10 MB.")
-
-        else:
-            try:
-                image = Image.open(BytesIO(content))
-                image.verify()
-
-                image = Image.open(BytesIO(content))
-
-                if image.format not in ALLOWED_FORMATS:
-                    st.error("Please upload a JPEG, PNG, or WEBP image.")
-                    st.stop()
-
-                image.load()
-                image = image.convert("RGB")
-
-                st.subheader("Uploaded Image")
-                st.image(image, use_container_width=True)
-
-                col1, col2, col3 = st.columns(3)
-                col1.metric("Width", f"{image.width} px")
-                col2.metric("Height", f"{image.height} px")
-                col3.metric("File Size", f"{len(content) / 1024:.1f} KB")
-
-                if st.button("Analyze Image", type="primary"):
-                    try:
-                        with st.spinner("Loading AI model and detecting objects..."):
-                            model = load_model()
-                            results = model.predict(
-                                source=image,
-                                conf=confidence,
-                                verbose=False
-                            )
-
-                        result = results[0]
-                        detections = []
-
-                        for box in result.boxes:
-                            class_id = int(box.cls[0].item())
-                            score = float(box.conf[0].item())
-                            coordinates = [
-                                round(float(value), 2)
-                                for value in box.xyxy[0].tolist()
-                            ]
-
-                            detections.append({
-                                "Object": model.names[class_id],
-                                "Confidence": f"{score * 100:.2f}%",
-                                "Bounding Box": str(coordinates)
-                            })
-
-                        st.subheader("Detection Results")
-
-                        # Ultralytics returns an image in BGR format.
-                        annotated_image = result.plot()[:, :, ::-1].copy()
-                        st.image(
-                            annotated_image,
-                            caption="AI Object Detection",
-                            use_container_width=True
-                        )
-
-                        st.metric("Objects Detected", len(detections))
-
-                        if detections:
-                            st.dataframe(
-                                detections,
-                                use_container_width=True,
-                                hide_index=True
-                            )
-                        else:
-                            st.warning(
-                                "No objects detected above the selected "
-                                "confidence threshold."
-                            )
-
-                    except Exception as error:
-                        st.error(f"AI analysis failed: {error}")
-
-            except (
-                UnidentifiedImageError,
-                OSError,
-                ValueError
-            ):
-                st.error("The uploaded file is not a valid image.")
+except Exception as error:
+    model_error = str(error)
+    print(f"Warning: YOLO model could not be loaded: {model_error}")
 
 
-# ---------------- OTHER MODULES ----------------
-elif page == "Safety Monitor":
-    st.header("Safety Monitor")
-    st.info(
-        "A dedicated construction safety detection model is not "
-        "configured in this version."
-    )
-    st.write(
-        "The general YOLO model should not be treated as a validated "
-        "PPE or construction safety monitoring system."
-    )
+# --------------------------------------------------
+# IMAGE VALIDATION HELPER
+# --------------------------------------------------
 
+async def read_image(file: UploadFile):
+    """
+    Read and validate an uploaded image.
 
-elif page == "Crack Analysis":
-    st.header("Crack Analysis")
-    st.info(
-        "A specialized crack detection model is not configured yet. "
-        "General object detection cannot reliably measure structural cracks."
-    )
+    Returns:
+        image: A PIL RGB image
+        image_format: Original image format
+        image_bytes: Original image bytes
+    """
 
+    if not file.filename:
+        raise HTTPException(
+            status_code=400,
+            detail="Please upload a file with a valid filename.",
+        )
 
-elif page == "Cost Estimator":
-    st.header("Construction Cost Estimator")
+    content_type = (file.content_type or "").lower()
 
-    area = st.number_input(
-        "Building area (square feet)",
-        min_value=1.0,
-        value=1000.0
-    )
+    if content_type and not content_type.startswith("image/"):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid file type. Please upload an image.",
+        )
 
-    rate = st.number_input(
-        "Estimated cost per square foot (₹)",
-        min_value=1.0,
-        value=1800.0
-    )
+    image_bytes = await file.read()
 
-    quality = st.selectbox(
-        "Construction quality",
-        ["Basic", "Standard", "Premium"]
-    )
+    if not image_bytes:
+        raise HTTPException(
+            status_code=400,
+            detail="The uploaded file is empty.",
+        )
 
-    multipliers = {
-        "Basic": 0.85,
-        "Standard": 1.0,
-        "Premium": 1.30
-    }
+    if len(image_bytes) > MAX_FILE_SIZE:
+        raise HTTPException(
+            status_code=413,
+            detail="Image size must not exceed 10 MB.",
+        )
 
-    if st.button("Calculate Estimated Cost", type="primary"):
-        total = area * rate * multipliers[quality]
+    try:
+        # Verify image integrity before processing.
+        with Image.open(BytesIO(image_bytes)) as check_image:
+            image_format = check_image.format
 
-        st.subheader("Estimated Construction Cost")
-        st.metric("Total Estimated Cost", f"₹{total:,.2f}")
+            if image_format not in ALLOWED_FORMATS:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Unsupported image format. Use JPEG, PNG, or WEBP.",
+                )
 
-        col1, col2, col3 = st.columns(3)
-        col1.metric("Materials (55%)", f"₹{total * 0.55:,.2f}")
-        col2.metric("Labour (25%)", f"₹{total * 0.25:,.2f}")
-        col3.metric("Finishing (20%)", f"₹{total * 0.20:,.2f}")
+            check_image.verify()
 
-        st.caption(
-            "Illustrative estimate only. Actual costs vary by location, "
-            "materials, design, and labour rates."
+        # Reopen the verified image for actual processing.
+        with Image.open(BytesIO(image_bytes)) as opened_image:
+            image = opened_image.convert("RGB")
+
+        return image, image_format, image_bytes
+
+    except HTTPException:
+        raise
+
+    except (UnidentifiedImageError, OSError, ValueError):
+        raise HTTPException(
+            status_code=400,
+            detail="The uploaded file is not a valid or supported image.",
         )
 
 
-# ---------------- AI ASSISTANT ----------------
-elif page == "AI Assistant":
-    st.header("Construction AI Assistant")
+# --------------------------------------------------
+# ROOT ENDPOINT
+# --------------------------------------------------
 
-    question = st.text_input(
-        "Ask a construction-related question",
-        placeholder="e.g. What is concrete curing?"
-    )
+@app.get("/")
+async def root():
+    return {
+        "success": True,
+        "message": "ConstructionAI backend is running.",
+        "docs": "/docs",
+        "health": "/api/health",
+    }
 
-    if st.button("Get Answer"):
-        if not question.strip():
-            st.warning("Please enter a question.")
-        else:
-            q = question.lower()
 
-            answers = {
-                "concrete": (
-                    "Concrete is made from cement, water, sand, and "
-                    "aggregates. The correct mix depends on the intended "
-                    "use and engineering specifications."
-                ),
-                "curing": (
-                    "Concrete curing maintains adequate moisture and "
-                    "temperature so concrete can develop strength. Follow "
-                    "the project's specifications and applicable standards."
-                ),
-                "safety": (
-                    "Construction sites require appropriate PPE, hazard "
-                    "assessments, safe access, and compliance with local "
-                    "safety regulations."
-                ),
-                "cement": (
-                    "Cement is a binding material used in concrete and "
-                    "mortar. Select the type according to project "
-                    "requirements and applicable standards."
-                ),
-                "crack": (
-                    "Cracks can have different causes. Their width, pattern, "
-                    "location, and progression matter. Have potentially "
-                    "structural cracks assessed by a qualified engineer."
-                )
-            }
+# --------------------------------------------------
+# HEALTH CHECK
+# --------------------------------------------------
 
-            answer = next(
-                (value for keyword, value in answers.items() if keyword in q),
-                "I do not have a specific answer for that question yet. "
-                "Please consult a qualified construction professional "
-                "for project-specific engineering advice."
-            )
+@app.get("/api/health")
+async def health_check():
+    return {
+        "status": "healthy",
+        "service": "ConstructionAI API",
+        "ai_model_loaded": model is not None,
+        "ai_model_error": model_error if model is None else None,
+    }
 
-            st.markdown("**Answer:**")
-            st.write(answer)
+
+# --------------------------------------------------
+# IMAGE ANALYSIS
+# --------------------------------------------------
+
+@app.post("/api/analyze-image")
+async def analyze_image(file: UploadFile = File(...)):
+    image, image_format, image_bytes = await read_image(file)
+
+    width, height = image.size
+
+    return {
+        "success": True,
+        "filename": file.filename,
+        "format": image_format,
+        "width": width,
+        "height": height,
+        "size_bytes": len(image_bytes),
+        "size_mb": round(len(image_bytes) / (1024 * 1024), 2),
+        "message": "Image uploaded and validated successfully.",
+    }
+
+
+# --------------------------------------------------
+# YOLO OBJECT DETECTION
+# --------------------------------------------------
+
+@app.post("/api/detect-objects")
+async def detect_objects(file: UploadFile = File(...)):
+    if model is None:
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "The AI detection model is unavailable. "
+                "Check the Render deployment logs and model configuration."
+            ),
+        )
+
+    image, image_format, image_bytes = await read_image(file)
+
+    try:
+        # Run object detection.
+        results = model.predict(
+            source=image,
+            conf=0.25,
+            verbose=False,
+        )
+
+        detections = []
+
+        if results:
+            result = results[0]
+            boxes = result.boxes
+
+            if boxes is not None:
+                for box in boxes:
+                    class_id = int(box.cls[0].item())
+                    confidence = float(box.conf[0].item())
+
+                    coordinates = box.xyxy[0].tolist()
+
+                    class_names = result.names
+                    if isinstance(class_names, dict):
+                        object_name = class_names.get(
+                            class_id,
+                            str(class_id),
+                        )
+                    else:
+                        object_name = (
+                            class_names[class_id]
+                            if class_id < len(class_names)
+                            else str(class_id)
+                        )
+
+                    detections.append(
+                        {
+                            "object": object_name,
+                            "confidence": round(confidence * 100, 2),
+                            "box": {
+                                "x1": round(float(coordinates[0]), 2),
+                                "y1": round(float(coordinates[1]), 2),
+                                "x2": round(float(coordinates[2]), 2),
+                                "y2": round(float(coordinates[3]), 2),
+                            },
+                        }
+                    )
+
+        return {
+            "success": True,
+            "filename": file.filename,
+            "format": image_format,
+            "width": image.width,
+            "height": image.height,
+            "size_bytes": len(image_bytes),
+            "count": len(detections),
+            "detections": detections,
+            "message": (
+                "Object detection completed successfully."
+                if detections
+                else "No objects were detected in this image."
+            ),
+        }
+
+    except HTTPException:
+        raise
+
+    except Exception as error:
+        print(f"Object detection error: {error}")
+        raise HTTPException(
+            status_code=500,
+            detail="An error occurred while processing the image.",
+        )
