@@ -1,0 +1,488 @@
+
+import { useState, useEffect } from "react";
+import axios from "axios";
+import "./App.css";
+
+const API = "http://127.0.0.1:8000";
+
+const modules = [
+  ["Dashboard", "🏠"],
+  ["Image Analysis", "🔍"],
+  ["Safety Monitor", "🦺"],
+  ["Crack Analysis", "🧱"],
+  ["Cost Estimator", "💰"],
+  ["AI Assistant", "🤖"],
+];
+
+function App() {
+  const [tab, setTab] = useState("Dashboard");
+  const [backend, setBackend] = useState(false);
+  const [model, setModel] = useState(false);
+  const [image, setImage] = useState(null);
+  const [preview, setPreview] = useState("");
+  const [results, setResults] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [status, setStatus] = useState("");
+
+  async function checkBackend() {
+    try {
+      const { data } = await axios.get(`${API}/api/health`);
+      setBackend(data?.status === "healthy");
+      setModel(data?.ai_model_loaded === true);
+      setStatus("Backend checked.");
+    } catch {
+      setBackend(false);
+      setModel(false);
+      setStatus("Backend offline. Start your FastAPI server.");
+    }
+  }
+
+  useEffect(() => {
+    checkBackend();
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (preview) URL.revokeObjectURL(preview);
+    };
+  }, [preview]);
+
+  function changeTab(name) {
+    setTab(name);
+    setStatus("");
+  }
+
+  function selectImage(event) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+      setStatus("Select a JPG, PNG, or WEBP image.");
+      event.target.value = "";
+      return;
+    }
+
+    if (file.size > 10 * 1024 * 1024) {
+      setStatus("Image must be smaller than 10 MB.");
+      event.target.value = "";
+      return;
+    }
+
+    setImage(file);
+    setPreview(URL.createObjectURL(file));
+    setResults(null);
+    setStatus("Image selected.");
+  }
+
+  async function analyzeImage() {
+    if (!image) return setStatus("Please select an image first.");
+
+    setLoading(true);
+    setResults(null);
+    setStatus("Analyzing image...");
+
+    try {
+      const form = new FormData();
+      form.append("file", image);
+
+      const { data } = await axios.post(
+        `${API}/api/detect-objects`,
+        form
+      );
+
+      setResults(data);
+      setStatus(data?.message || "Analysis completed.");
+    } catch (error) {
+      setStatus(
+        error.response?.data?.detail ||
+        error.response?.data?.message ||
+        error.message ||
+        "Image analysis failed."
+      );
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function renderContent() {
+    switch (tab) {
+      case "Dashboard":
+        return (
+          <>
+            <section className="welcome">
+              <div>
+                <p className="eyebrow">SMARTER CONSTRUCTION</p>
+                <h2>Welcome to ConstructionAI 👋</h2>
+                <p>Your construction intelligence workspace.</p>
+                <button className="primary-button"
+                  onClick={() => changeTab("Image Analysis")}>
+                  Start Image Analysis →
+                </button>
+              </div>
+              <span className="welcome-icon">🏗️</span>
+            </section>
+
+            <section className="stats">
+              <article className="stat-card">
+                <p>Backend</p><h2>{backend ? "Online" : "Offline"}</h2>
+              </article>
+              <article className="stat-card">
+                <p>AI Model</p><h2>{model ? "Ready" : "Unavailable"}</h2>
+              </article>
+              <article className="stat-card">
+                <p>Image Selected</p><h2>{image ? 1 : 0}</h2>
+              </article>
+              <article className="stat-card">
+                <p>Objects Detected</p>
+                <h2>{results?.count ?? results?.detections?.length ?? 0}</h2>
+              </article>
+            </section>
+
+            <section className="panel">
+              <h2>Project Modules</h2>
+              <div className="module-grid">
+                {modules.slice(1).map(([name, icon]) => (
+                  <article className="module" key={name}>
+                    <span>{icon}</span>
+                    <div>
+                      <h3>{name}</h3>
+                      <button className="secondary-button"
+                        onClick={() => changeTab(name)}>
+                        Open Module →
+                      </button>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            </section>
+          </>
+        );
+
+      case "Image Analysis":
+        return (
+          <>
+            <section className="welcome">
+              <div>
+                <p className="eyebrow">AI VISION</p>
+                <h2>Construction Image Analysis</h2>
+                <p>Upload an image for object detection.</p>
+              </div>
+              <span className="welcome-icon">🔍</span>
+            </section>
+
+            <section className="content-grid">
+              <article className="panel upload-panel">
+                <h2>Upload Image</h2>
+                <p>JPG, PNG, WEBP · Maximum 10 MB</p>
+                <input type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  onChange={selectImage} />
+
+                {preview && (
+                  <div className="preview">
+                    <img src={preview} alt="Selected construction site" />
+                    <p>{image?.name}</p>
+                    <button className="secondary-button"
+                      onClick={() => {
+                        setImage(null);
+                        setPreview("");
+                        setResults(null);
+                      }}>
+                      Remove Image
+                    </button>
+                  </div>
+                )}
+
+                <button className="primary-button"
+                  disabled={!image || loading || !backend || !model}
+                  onClick={analyzeImage}>
+                  {loading ? "Analyzing..." : "Run AI Detection"}
+                </button>
+                <p className="status-message">
+                  {!backend
+                    ? "Start the FastAPI backend."
+                    : !model
+                    ? "AI model is unavailable."
+                    : status}
+                </p>
+              </article>
+
+              <article className="panel">
+                <h2>Analysis Results</h2>
+                {!results ? (
+                  <p>No results yet. Upload an image to begin.</p>
+                ) : (
+                  <>
+                    <h3>
+                      Objects detected:{" "}
+                      {results.count ?? results.detections?.length ?? 0}
+                    </h3>
+                    <p>{results.message}</p>
+                    {(results.detections || []).map((item, index) => (
+                      <article className="module" key={index}>
+                        <div>
+                          <h3>{item.object || "Detected object"}</h3>
+                          <p>Confidence: {item.confidence ?? "N/A"}%</p>
+                          {item.box && <p>Box: {item.box.join(", ")}</p>}
+                        </div>
+                      </article>
+                    ))}
+                  </>
+                )}
+              </article>
+            </section>
+          </>
+        );
+
+      case "Safety Monitor":
+        return (
+          <section className="panel">
+            <h2>🦺 Safety Monitor</h2>
+            <p>Safety monitoring modules are not connected to a dedicated model yet.</p>
+            {["Helmet Detection", "Safety Vest Detection", "Site Risk Monitoring"].map(
+              (item) => (
+                <article className="module" key={item}>
+                  <h3>{item}</h3>
+                  <p>In development — a suitable detection model is required.</p>
+                </article>
+              )
+            )}
+            <button className="primary-button"
+              onClick={() => changeTab("Image Analysis")}>
+              Open Image Analysis
+            </button>
+          </section>
+        );
+
+      case "Crack Analysis":
+        return (
+          <section className="panel">
+            <h2>🧱 Crack Analysis</h2>
+            <p>A dedicated crack detection model is required to analyze wall and concrete cracks.</p>
+            <button className="primary-button"
+              onClick={() => changeTab("Image Analysis")}>
+              Open Image Analysis
+            </button>
+          </section>
+        );
+
+      case "Cost Estimator":
+        return <CostEstimator />;
+
+      case "AI Assistant":
+        return <AssistantFAQ />;
+
+      default:
+        return null;
+    }
+  }
+
+  return (
+    <div className="app">
+      <aside className="sidebar">
+        <h2 className="brand">🏗️ ConstructionAI</h2>
+        <p className="nav-label">WORKSPACE</p>
+        <nav>
+          {modules.map(([name, icon]) => (
+            <button key={name}
+              className={`nav-item ${tab === name ? "active" : ""}`}
+              onClick={() => changeTab(name)}>
+              <span>{icon}</span> <span>{name}</span>
+            </button>
+          ))}
+        </nav>
+        <div className="sidebar-footer">
+          AI-powered construction intelligence
+        </div>
+      </aside>
+
+      <main className="main">
+        <header className="topbar">
+          <div>
+            <p className="eyebrow">CONSTRUCTION INTELLIGENCE PLATFORM</p>
+            <h1>{tab}</h1>
+          </div>
+          <button className="status-button" onClick={checkBackend}>
+            {backend ? "🟢 Backend Online" : "🔴 Backend Offline"}
+          </button>
+        </header>
+
+        {renderContent()}
+        {status && tab !== "Image Analysis" && (
+          <p className="status-message" role="status">{status}</p>
+        )}
+        <footer>ConstructionAI · AI-powered construction intelligence</footer>
+      </main>
+    </div>
+  );
+}
+
+function CostEstimator() {
+  const [area, setArea] = useState("1000");
+  const [rate, setRate] = useState("1800");
+  const [type, setType] = useState("Residential");
+  const [quality, setQuality] = useState("Standard");
+  const [result, setResult] = useState(null);
+  const [error, setError] = useState("");
+
+  function calculate(event) {
+    event.preventDefault();
+
+    const a = Number(area);
+    const r = Number(rate);
+
+    if (!area.trim() || !rate.trim() ||
+        !Number.isFinite(a) || !Number.isFinite(r) || a <= 0 || r <= 0) {
+      setError("Enter a valid area and rate greater than zero.");
+      setResult(null);
+      return;
+    }
+
+    setError("");
+    const multiplier = { Basic: 0.85, Standard: 1, Premium: 1.3 };
+    const total = a * r * multiplier[quality];
+
+    setResult({
+      area: a,
+      rate: r,
+      type,
+      quality,
+      total,
+      materials: total * 0.55,
+      labour: total * 0.25,
+      finishing: total * 0.20,
+    });
+  }
+
+  const money = (value) =>
+    new Intl.NumberFormat("en-IN", {
+      style: "currency",
+      currency: "INR",
+      maximumFractionDigits: 0,
+    }).format(value);
+
+  return (
+    <section className="panel">
+      <h2>💰 Construction Cost Estimator</h2>
+      <p>Enter the area and estimated local cost per square foot.</p>
+
+      <form className="assistant-form" onSubmit={calculate}>
+        <div className="form-grid">
+          <label>Built-up area (sq. ft.)
+            <input type="number" min="1" step="any" required
+              value={area} onChange={(e) => setArea(e.target.value)} />
+          </label>
+
+          <label>Cost per square foot (₹)
+            <input type="number" min="1" step="any" required
+              value={rate} onChange={(e) => setRate(e.target.value)} />
+          </label>
+
+          <label>Building type
+            <select value={type} onChange={(e) => setType(e.target.value)}>
+              <option>Residential</option>
+              <option>Commercial</option>
+            </select>
+          </label>
+
+          <label>Construction quality
+            <select value={quality} onChange={(e) => setQuality(e.target.value)}>
+              <option>Basic</option>
+              <option>Standard</option>
+              <option>Premium</option>
+            </select>
+          </label>
+        </div>
+
+        <button className="primary-button" type="submit">
+          Generate Estimate
+        </button>
+      </form>
+
+      {error && <p className="status-message" role="alert">{error}</p>}
+
+      {result && (
+        <div className="estimate-result" aria-live="polite">
+          <h2>Estimated Total: {money(result.total)}</h2>
+          <p>Area: {result.area.toLocaleString("en-IN")} sq. ft.</p>
+          <p>Rate: {money(result.rate)} per sq. ft.</p>
+          <p>Building: {result.type} · Quality: {result.quality}</p>
+          <hr />
+          <h3>Estimated Breakdown</h3>
+          <p>Materials (55%): {money(result.materials)}</p>
+          <p>Labour (25%): {money(result.labour)}</p>
+          <p>Finishing (20%): {money(result.finishing)}</p>
+          <small>Illustrative estimate only, not a contractor quotation or live market price.</small>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function AssistantFAQ() {
+  const [question, setQuestion] = useState("");
+  const [answer, setAnswer] = useState("");
+
+  const faqs = [
+    {
+      words: ["concrete", "cement"],
+      text: "Concrete commonly uses cement, water, sand, and coarse aggregate. The mix depends on engineering specifications."
+    },
+    {
+      words: ["helmet", "safety", "ppe"],
+      text: "Use appropriate PPE and follow site safety procedures and applicable safety requirements."
+    },
+    {
+      words: ["crack", "wall"],
+      text: "Cracks can have different causes. Significant or growing cracks should be inspected by a qualified structural engineer."
+    },
+    {
+      words: ["cost", "budget", "price"],
+      text: "Construction costs depend on location, area, design, labour, materials, and finishes. Try the Cost Estimator module."
+    },
+    {
+      words: ["brick", "bricks"],
+      text: "Brick quantities depend on wall dimensions, brick size, mortar joints, and openings such as doors and windows."
+    }
+  ];
+
+  function answerQuestion(event) {
+    event.preventDefault();
+    const q = question.trim().toLowerCase();
+
+    if (!q) {
+      setAnswer("Please enter a question.");
+      return;
+    }
+
+    const match = faqs.find((item) =>
+      item.words.some((word) => q.includes(word))
+    );
+
+    setAnswer(match
+      ? match.text
+      : "This demo supports questions about concrete, safety, cracks, cost, and bricks. It is not connected to a live AI model.");
+  }
+
+  return (
+    <section className="panel">
+      <h2>🤖 Construction AI Assistant</h2>
+      <p>Ask a construction question.</p>
+      <form className="assistant-form" onSubmit={answerQuestion}>
+        <label htmlFor="question">Your question</label>
+        <textarea id="question" rows="4" value={question}
+          onChange={(e) => setQuestion(e.target.value)}
+          placeholder="Example: What causes cracks in walls?" />
+        <button className="primary-button" type="submit">Get Answer</button>
+      </form>
+      {answer && (
+        <div className="estimate-result" role="status">
+          <h3>Answer</h3>
+          <p>{answer}</p>
+        </div>
+      )}
+    </section>
+  );
+}
+
+export default App;
