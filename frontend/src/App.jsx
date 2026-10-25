@@ -3,7 +3,8 @@ import { useState, useEffect } from "react";
 import axios from "axios";
 import "./App.css";
 
-const API = "https://constructionai-backend.onrender.com";
+const API = (import.meta.env.VITE_API_URL || "https://constructionai-backend.onrender.com").replace(/\/$/, "");
+
 
 const modules = [
   ["Dashboard", "🏠"],
