@@ -1,8 +1,5 @@
+
 streamlit
 ultralytics
-pillow
-fastapi
-uvicorn[standard]
-python-multipart
-python-dotenv
-httpx
+opencv-python-headless
+Pillow
