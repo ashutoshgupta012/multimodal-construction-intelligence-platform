@@ -106,53 +106,100 @@ function App() {
 
   function renderContent() {
     switch (tab) {
-      case "Dashboard":
+            case "Dashboard":
         return (
           <>
-            <section className="welcome">
-              <div>
-                <p className="eyebrow">SMARTER CONSTRUCTION</p>
-                <h2>Welcome to ConstructionAI 👋</h2>
-                <p>Your construction intelligence workspace.</p>
-                <button className="primary-button"
-                  onClick={() => changeTab("Image Analysis")}>
+            <section className="dashboard-welcome">
+              <div className="dashboard-welcome-content">
+                <p className="eyebrow">CONSTRUCTION WORKSPACE</p>
+                <h2>Welcome to ConstructionAI</h2>
+                <p>
+                  Monitor your project tools, analyze construction images,
+                  and estimate building costs from one place.
+                </p>
+                <button
+                  className="primary-button"
+                  onClick={() => changeTab("Image Analysis")}
+                >
                   Start Image Analysis →
                 </button>
               </div>
-              <span className="welcome-icon">🏗️</span>
+              <div className="dashboard-illustration">🏗️</div>
             </section>
 
-            <section className="stats">
-              <article className="stat-card">
-                <p>Backend</p><h2>{backend ? "Online" : "Offline"}</h2>
+            <section className="dashboard-stats">
+              <article className="dashboard-stat">
+                <div className="stat-icon blue">◉</div>
+                <div>
+                  <p>Backend Status</p>
+                  <h3>{backend ? "Online" : "Offline"}</h3>
+                  <span>{backend ? "Connection active" : "Not connected"}</span>
+                </div>
               </article>
-              <article className="stat-card">
-                <p>AI Model</p><h2>{model ? "Ready" : "Unavailable"}</h2>
+
+              <article className="dashboard-stat">
+                <div className="stat-icon green">✦</div>
+                <div>
+                  <p>AI Model</p>
+                  <h3>{model ? "Ready" : "Unavailable"}</h3>
+                  <span>{model ? "Ready to analyze" : "Check model status"}</span>
+                </div>
               </article>
-              <article className="stat-card">
-                <p>Image Selected</p><h2>{image ? 1 : 0}</h2>
+
+              <article className="dashboard-stat">
+                <div className="stat-icon purple">▧</div>
+                <div>
+                  <p>Images Selected</p>
+                  <h3>{image ? "1" : "0"}</h3>
+                  <span>{image ? "Image uploaded" : "No image selected"}</span>
+                </div>
               </article>
-              <article className="stat-card">
-                <p>Objects Detected</p>
-                <h2>{results?.count ?? results?.detections?.length ?? 0}</h2>
+
+              <article className="dashboard-stat">
+                <div className="stat-icon orange">⌕</div>
+                <div>
+                  <p>Objects Detected</p>
+                  <h3>{results?.count ?? results?.detections?.length ?? 0}</h3>
+                  <span>Latest analysis result</span>
+                </div>
               </article>
             </section>
 
-            <section className="panel">
-              <h2>Project Modules</h2>
-              <div className="module-grid">
-                {modules.slice(1).map(([name, icon]) => (
-                  <article className="module" key={name}>
-                    <span>{icon}</span>
-                    <div>
+            <section className="dashboard-modules">
+              <div className="section-heading">
+                <div>
+                  <h2>Project Modules</h2>
+                  <p>Choose a tool to get started.</p>
+                </div>
+              </div>
+
+              <div className="dashboard-module-grid">
+                {modules.slice(1).map(([name, icon]) => {
+                  const descriptions = {
+                    "Image Analysis": "Detect objects in construction images.",
+                    "Safety Monitor": "Explore construction site safety tools.",
+                    "Crack Analysis": "Review wall and concrete crack analysis.",
+                    "Cost Estimator": "Calculate an estimated construction budget.",
+                    "AI Assistant": "Get answers to common construction questions.",
+                  };
+
+                  return (
+                    <article className="dashboard-module-card" key={name}>
+                      <div className="module-card-top">
+                        <span className="module-card-icon">{icon}</span>
+                        <span className="module-arrow">↗</span>
+                      </div>
                       <h3>{name}</h3>
-                      <button className="secondary-button"
-                        onClick={() => changeTab(name)}>
-                        Open Module →
+                      <p>{descriptions[name]}</p>
+                      <button
+                        className="module-link"
+                        onClick={() => changeTab(name)}
+                      >
+                        Open module <span>→</span>
                       </button>
-                    </div>
-                  </article>
-                ))}
+                    </article>
+                  );
+                })}
               </div>
             </section>
           </>
