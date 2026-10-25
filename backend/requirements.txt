@@ -1,6 +1,8 @@
+streamlit
+ultralytics
+pillow
 fastapi
 uvicorn[standard]
 python-multipart
-pillow
 python-dotenv
 httpx
